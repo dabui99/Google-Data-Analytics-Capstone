@@ -1,0 +1,370 @@
+---
+title: "Google Data Analytics Capstone Case Study 1"
+output: 
+  html_notebook: default
+  pdf_document: default
+date: '2022-07-29'
+---
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## Ask 
+
+##### Guiding questions 
+
+* What is the problem you are trying to solve?
+  + The goal is to build a marketing strategies to covert casual riders to annual members.
+* How can your insights drive business decisions?
+  + The insights will help the marketing team to increase the annual members. 
+
+
+## Prepare
+
+##### Guiding questions 
+
+* Where is your data located?
+  + The data is located in the Google database; link is provided with the case study description
+* How is the data organized?
+  + The data is separated by month, each on its own csv (between July 2021 and June 2022).
+* Are there issues with bias or credibility in this data? Does your data ROCCC?
+  + There are not any issues with bias, since the population of the dataset is its own clients as bike riders. It's ROCC because it's reliable, original, comprehensive, current, and cited. 
+* How are you addressing licnesing, privacy, security, and accessibility? 
+  + The company has their own license over the dataset. The dataset does not have personal information about the riders. 
+* How did you verify the data's integrity?
+  + All the files have consistent names, columns and eahc column has the correct data type. 
+* How does it help you answer your question?
+  + It contains some key insights about the routine activities of riders.
+* Are there any problems with the data?
+  + It would be more helpful if there's more information about the riders.
+
+
+
+
+## Process
+
+##### Guiding questions 
+
+* What tools are you choosing and why?  
+  + Here, I’m using R to merge the data of 12 months into 1 large data-frame because it’s easier to merge a large dataset. 
+* Have you ensured your data’s integrity?  
+  + Yes, the data is consistent throughout the columns.
+* What steps have you taken to ensure that your data is clean?
+  + First, I removed duplicates. Then, I re-format the date and time of the columns.   
+* How can you verify that your data is clean and ready to analyze?
+  + It can be verified by this document.  
+* Have you documented your cleaning process so you can review and share those results?
+  + Yes, it’s all documented in this R notebook.
+  
+### Code
+
+###### Dependences
+
+```{r}
+library(tidyverse)
+```
+
+
+##### Concatenating 
+
+Concatenating csv files
+```{r}
+csv_files <- list.files(path = "data", recursive = TRUE, full.names=TRUE)
+
+df <- do.call(rbind, lapply(csv_files, read.csv))
+
+head(df, 5)
+```
+
+#### Data Cleaning 
+
+##### Removing duplicates
+```{r}
+df_no_dups <- df[!duplicated(df), ]
+print(paste("Removed", nrow(df) - nrow(df_no_dups), "duplicated rows"))
+```
+
+##### Parse datetime columns
+```{r}
+df_no_dups$started_at <- as.POSIXct(df_no_dups$started_at, "%Y-%m-%d %H:%M:%S")
+df_no_dups$ended_at <- as.POSIXct(df_no_dups$ended_at, "%Y-%m-%d %H:%M:%S")
+```
+
+
+##### ride_time_minute 
+The total ride time in minutes
+
+```{r}
+df_no_dups <- df_no_dups %>%
+  mutate(ride_time_minutes = as.numeric(df_no_dups$ended_at - df_no_dups$started_at)/ 60)
+
+summary(df_no_dups$ride_time_minutes)
+```
+##### year_month
+Separate the year and month might be helful
+
+
+```{r}
+df_no_dups <- df_no_dups %>%
+    mutate(year_month = paste(strftime(df_no_dups$started_at, "%Y"),
+                              "-",
+                              strftime(df_no_dups$started_at, "%m"),
+                              "(", strftime(df_no_dups$started_at, "%b"), ")"))
+unique(df_no_dups$year_month)
+```
+
+##### weekday
+Show the weekday
+
+```{r}
+df_no_dups <- df_no_dups %>%
+  mutate(weekday = paste(strftime(df_no_dups$ended_at, "%u"),
+                         "-",
+                         strftime(df_no_dups$ended_at, "%a")))
+unique(df_no_dups$weekday)
+```
+##### start_hour
+Show the start hour
+```{r}
+df_no_dups <- df_no_dups %>%
+  mutate(start_hour = strftime(df_no_dups$started_at, "%H"))
+
+unique(df_no_dups$start_hour)
+```
+Save the file
+
+```{r}
+df_no_dups %>% write.csv("cleaned_data.csv")
+```
+
+
+## Analyze
+
+### Code
+
+```{r}
+head(df_no_dups)
+summary(df_no_dups)
+```
+Function to resize the plots
+```{r}
+fig <- function(width, height) {
+  options(repr.plot.width = width,
+          repr.plot.height = height)
+}
+```
+
+Distribution of Members and Casual riders
+```{r}
+df_no_dups %>% group_by(member_casual) %>%
+  summarise(freq = length(ride_id),
+            percent_total = length(ride_id)/ nrow(df_no_dups) *100)
+```
+```{r}
+fig(16,8)
+ggplot(df_no_dups, aes(member_casual, fill = member_casual)) +
+  geom_bar() +
+  labs(x= "Member & Casual", title = "Figure 1: Member & Casual distribution")
+```
+By Year and Month
+```{r}
+df_no_dups %>%
+  group_by(year_month) %>%
+  summarise(freq = length(ride_id),
+            percent_total = length(ride_id)/ nrow(df_no_dups) *100,
+            'member_%' = sum(member_casual == "member")/ length(ride_id) *100,
+            'casual_%' = sum(member_casual == "casual")/ length(ride_id) *100,
+            'member_casual_diff' = (sum(member_casual == "member") - sum(member_casual == "casual"))/ length(ride_id) *100)
+```
+```{r}
+df_no_dups %>%
+  ggplot(aes(year_month, fill = member_casual)) +
+  geom_bar() +
+  labs(x="Month", title = "Figure 2: Distribution by Month") +
+  coord_flip()
+```
+
+By Weekday
+```{r}
+df_no_dups %>%
+  group_by(weekday) %>%
+  summarise(freq = length(ride_id),
+            percent_total = length(ride_id)/ nrow(df_no_dups) *100,
+            'member_%' = sum(member_casual == "member")/ length(ride_id) *100,
+            'casual_%' = sum(member_casual == "casual")/ length(ride_id) *100,
+            'member_casual_diff' = (sum(member_casual == "member") - sum(member_casual == "casual"))/ length(ride_id) *100)
+```
+
+```{r}
+df_no_dups %>%
+  ggplot(aes(weekday, fill = member_casual)) +
+  geom_bar() +
+  labs(x="Day of the week", title = "Figure 3: Distribution by Weekday") +
+  coord_flip()
+```
+By Hour of the day
+```{r}
+df_no_dups %>%
+  group_by(start_hour) %>%
+  summarise(freq = length(ride_id),
+            percent_total = length(ride_id)/ nrow(df_no_dups) *100,
+            'member_%' = sum(member_casual == "member")/ length(ride_id) *100,
+            'casual_%' = sum(member_casual == "casual")/ length(ride_id) *100,
+            'member_casual_diff' = (sum(member_casual == "member") - sum(member_casual == "casual"))/ length(ride_id) *100)
+```
+```{r}
+df_no_dups %>%
+  ggplot(aes(start_hour, fill = member_casual)) +
+  geom_bar() +
+  labs(x="Hour of the day", title = "Figure 4: Distribution by hour of the day")
+```
+```{r}
+df_no_dups %>%
+  ggplot(aes(start_hour, fill = member_casual)) +
+  geom_bar() +
+  labs(x="Hour of the day", title = "Figure 5: Distribution by hour of the day") +
+  facet_wrap(~weekday)
+```
+
+There's a difference of riders types between weekend and mid_week
+```{r}
+df_no_dups %>%
+    mutate(type_of_weekday = ifelse(weekday == '6 - Sat' | weekday == '7 - Sun',
+                                   'weekend',
+                                   'midweek')) %>%
+    ggplot(aes(start_hour, fill=member_casual)) +
+    labs(x="Hour of the day", title="Figure 6 - Distribution by hour of the day in the midweek") +
+    geom_bar() +
+    facet_wrap(~ type_of_weekday)
+```
+
+The two plots differs in some key ways:
+
+* While the weekends have a rather smooth curve, the midweek have a more steep change in the number of riders.
+* For midweek, there's big increase during the mid-day then it falls towards the night. While that, For the weekend, the number of riders flow smoothly throughout the day, it starts off low then increase gradually towards 6-9am then starting falling. 
+
+It is important to question which type of bike used by which type of riders use during the day. From there, we can somewhat find out for what reasons they might use the bike for. 
+
+###### Ridedable type
+```{r}
+df_no_dups %>% 
+  group_by(rideable_type) %>%
+  summarise(freq = length(ride_id),
+            percent_total = length(ride_id)/ nrow(df_no_dups) *100,
+            'member_%' = sum(member_casual == "member")/ length(ride_id) *100,
+            'casual_%' = sum(member_casual == "casual")/ length(ride_id) *100,
+            'member_casual_diff' = (sum(member_casual == "member") - sum(member_casual == "casual"))/ length(ride_id) *100)
+```
+```{r}
+ggplot(df_no_dups, aes(rideable_type, fill = member_casual)) +
+  labs(x="Rideable Type", title = "Figure 7: Distribution of types of bikes") +
+  geom_bar()
+```
+Ride_time_m
+```{r}
+summary(df_no_dups$ride_time_minutes)
+```
+```{r}
+quantiles <- quantile(df_no_dups$ride_time_minutes, seq(0,1, by=0.05))
+quantiles
+```
+
+```{r}
+df_no_outliers <- df_no_dups %>%
+  filter(ride_time_minutes > as.numeric(quantiles["5%"])) %>%
+  filter(ride_time_minutes > as.numeric(quantiles["95%"]))
+
+print(paste("Removed", nrow(df_no_dups) - nrow(df_no_outliers), "rows as outliers"))
+```
+
+
+```{r}
+df_no_outliers %>% 
+  group_by(member_casual) %>%
+  summarise(mean = mean(ride_time_minutes),
+            "first_quarter" = as.numeric(quantile(ride_time_minutes, 0.25)),
+            "median" = median(ride_time_minutes),
+            "third_quarter" = as.numeric(quantile(ride_time_minutes, 0.75)),
+            "IR" = third_quarter - first_quarter)
+```
+
+
+```{r}
+df_no_outliers %>%
+  ggplot(aes(x=member_casual, y= ride_time_minutes, fill = member_casual)) +
+  labs(x="Members and Casual Riders", y="Riding time", title = "Figure 8: Distribution of Riding time for Casual and Member riders") +
+  geom_boxplot() + 
+  coord_flip() +
+  scale_y_continuous(limits = c(0,300))
+```
+```{r}
+
+  ggplot(df_no_outliers, aes(x=weekday, y= ride_time_minutes, fill = member_casual)) +
+  labs(x="Weekday", y="Riding time", title = "Figure 9: Distribution of Riding time for Casual and Member riders") +
+  geom_boxplot() +
+  facet_wrap(~ member_casual)+
+  coord_flip() + 
+  scale_y_continuous(limits = c(0,300))
+```
+
+
+```{r}
+ggplot(df_no_outliers, aes(x=rideable_type, y=ride_time_minutes, fill=member_casual)) +
+    geom_boxplot() +
+    facet_wrap(~ member_casual) +
+    labs(x="Rideable type", y="Riding time", title="Figure 10: Distribution of Riding time for rideable type") +
+    coord_flip() + 
+    scale_y_continuous(limits = c(0,300))
+```
+
+##### Guding questions 
+
+* How should you organize your data to perform analysis on it?
+  + The data has been organized into a single CSV called data.csv by concatenating all csv files (between July 2021 and June 2022) from the database given. 
+* Has your data been properly formatted?
+  + Yes, all the columns have been proper formatted into their correct data types.
+* What surprises did you discover in the data?
+  + One of the main surprises is how members differ from casual riders when analysed from weekday. Furthermore, the members have less riding time than the casual riders.
+* What trends or relationships did you find in the data?
+  + There are more members than casual riders from the dataset.
+  + There's a significant difference between the flow of members and casual from weekends to midweeks.
+  + Members have less riding time. 
+  + Members do not use docked bikes. 
+* How will these insights help answer your business questions?
+  + The insights helps to build a profile for members. 
+
+## Share 
+The share phase is usually done by building a presentation. But since this is only a showcase case study, this notebook can be seen as a presentation. 
+
+##### Guiding questions 
+
+* Were you able to answer the question of how annual members and casual riders use Cyclistic bike differently?
+  + Yes. The data shows several differences between casual and member riders
+* What story does your data tell?
+* How do your finding relate to your original question?
+  + The findings build a profile for members, relating to "Finding the key differences between casual and annual riders", also knowing why they use the bikes helps to find "How digital media could influence them".
+* Who is your audience? What is the best way to communicate with them?
+  + The main target audience is the marketing analytics team. The best way to communicate is through a slide presentation of the findings.
+* Can data visualization help you share your finding?
+  + Yes, the important part of the findings is through data visualization. 
+* Is your presentation accessible to you audience?
+  + Yes, the charts were made using vibrant colors and correct labels. 
+
+
+## Act 
+The act phase would be done by the marketing team of the company. The main takeaway will be the top three recommendations for the marketing. 
+
+##### Guiding questions
+
+* What is your final conclusion based on your analysis?
+  + Members and casual riders have different routine activities when using the bikes. The conclusion is further stated in the share phase. 
+* How could your team and business apply your insights?
+  + The insights could be implemented when preparing a marketing campaign for converting casual to members. The marketing team can have a focus on workers as a green way to get to work. 
+* What next steps would you or your stakeholders take based on your findings?
+  + Further analysis is needed to improve findings. However, the marketing team can take the key information from this analysis to build a marketing campaign. 
+* Is there additional data you could use to expand on your findings?
+  + Climate data
+  + More information about members
+
+
+
